@@ -22,5 +22,7 @@ WSGI_APPLICATION = "salary_web.wsgi.application"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+# Local execution also serves source assets before collectstatic is run.
+WHITENOISE_USE_FINDERS = True
 STORAGES = {"staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

@@ -9,16 +9,17 @@
   <main class="shell" data-api-url="{{ salary_api_url }}">
     <header><p class="eyebrow">KBO SALARY LAB · DEVELOPMENT</p><h1>다음 시즌, <em>적정 연봉</em>은?</h1><p class="intro">시즌 성적을 입력하면 모델이 다음 해 제안 연봉을 계산합니다. 현재는 학습 전 초기 모델입니다.</p></header>
     <section class="card">
-      <div class="tabs" role="tablist"><button class="tab active" data-type="batter">타자</button><button class="tab" data-type="pitcher">투수</button></div>
+      <div class="tabs" role="group" aria-label="선수 유형 선택"><button type="button" class="tab active" data-type="batter" aria-pressed="true">타자</button><button type="button" class="tab" data-type="pitcher" aria-pressed="false">투수</button></div>
+      <h2 id="selected-type" aria-live="polite">선택한 유형: 타자 · 타격 성적 입력</h2>
       <form id="salary-form">
         <input type="hidden" id="player_type" value="batter">
         <div id="batter-fields" class="grid">
           <label>경기 수<input name="games" type="number" min="0" value="120" required></label><label>타석<input name="plate_appearances" type="number" min="0" value="450" required></label><label>타율<input name="batting_average" type="number" min="0" max="1" step="0.001" value="0.285" required></label><label>홈런<input name="home_runs" type="number" min="0" value="15" required></label><label>타점<input name="rbi" type="number" min="0" value="70" required></label><label>도루<input name="stolen_bases" type="number" min="0" value="10" required></label>
         </div>
-        <div id="pitcher-fields" class="grid hidden">
+        <div id="pitcher-fields" class="grid hidden" hidden>
           <label>경기 수<input name="games_pitched" type="number" min="0" value="25"></label><label>이닝<input name="innings_pitched" type="number" min="0" step="0.1" value="150"></label><label>승<input name="wins" type="number" min="0" value="10"></label><label>세이브<input name="saves" type="number" min="0" value="0"></label><label>ERA<input name="era" type="number" min="0" step="0.01" value="3.5"></label><label>탈삼진<input name="strikeouts" type="number" min="0" value="120"></label>
         </div>
-        <button class="submit" type="submit">제안 연봉 계산하기</button>
+        <button class="submit" type="submit">타자 제안 연봉 계산하기</button>
       </form>
       <output id="result" class="result" aria-live="polite">성적을 입력해 계산해 보세요.</output>
     </section><p class="notice">안내: 이 개발 버전은 학습 데이터가 없는 초기 모델을 사용하므로 실제 계약 판단에 사용하면 안 됩니다.</p>

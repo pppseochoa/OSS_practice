@@ -1,7 +1,8 @@
 from pathlib import Path
+import os
 import joblib
 
-MODEL_PATH = Path(__file__).resolve().parent / "artifacts" / "salary_model.joblib"
+MODEL_PATH = Path(os.environ.get("SALARY_MODEL_PATH", str(Path(__file__).resolve().parent / "artifacts" / "salary_model.joblib")))
 
 class UntrainedSalaryModel:
     """학습 데이터 준비 전 개발·연동 검증용 모델이며 실제 계약 판단용이 아닙니다."""
