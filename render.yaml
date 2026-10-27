@@ -1,0 +1,13 @@
+# 예시: GitHub에서 이 폴더의 내용을 저장소 루트로 올린 뒤 Render Blueprint로 연결합니다.
+services:
+  - type: web
+    name: kbo-salary-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python -m ml.prepare_model
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+  - type: web
+    name: kbo-salary-web
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: gunicorn salary_web.wsgi:application --bind 0.0.0.0:$PORT

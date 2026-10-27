@@ -1,0 +1,31 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Runtime, logs, and generated files
+*.log
+staticfiles/
+db.sqlite3
+
+# Data and trained model artifacts (do not commit)
+data/
+ml/artifacts/
+*.joblib
+*.pkl
+
+# OS/editor/Codex files
+.vscode/
+.idea/
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
