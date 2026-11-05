@@ -1,0 +1,73 @@
+name: Build, verify and publish Docker image
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build locally for validation (includes model-load test)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: kbo-salary:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify fresh model load in final non-root image
+        run: docker run --rm kbo-salary:ci python -m ml.check_model
+
+      - name: Test running web, static assets and prediction API
+        run: |
+          set -euo pipefail
+          docker run -d --name salary-ci -p 127.0.0.1:18000:8000 kbo-salary:ci
+          trap 'docker logs salary-ci; docker rm -f salary-ci' EXIT
+          python scripts/smoke_test.py http://127.0.0.1:18000
+
+      - name: Set image name and tags
+        if: github.event_name != 'pull_request'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          test -n "$DOCKERHUB_USERNAME" || { echo 'Missing DOCKERHUB_USERNAME secret'; exit 1; }
+          image="${DOCKERHUB_USERNAME,,}/kbo-salary"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "TAG=sha-${GITHUB_SHA}" >> "$GITHUB_ENV"
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Publish tested image with immutable commit tag
+        if: github.event_name != 'pull_request'
+        run: |
+          docker tag kbo-salary:ci "$IMAGE:$TAG"
+          docker push "$IMAGE:$TAG"
+
+      - name: Update latest on default branch only
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        run: |
+          docker tag kbo-salary:ci "$IMAGE:latest"
+          docker push "$IMAGE:latest"
