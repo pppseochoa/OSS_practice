@@ -40,3 +40,8 @@ _diag/
 .service
 .path
 actions-runner-*.zip
+ml/datasets/test.csv
+reports/
+verification/
+*.png
+*.webp

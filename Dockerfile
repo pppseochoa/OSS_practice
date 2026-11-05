@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_DEBUG=False \
     SALARY_API_URL=/
 WORKDIR /app
+ARG DEPLOYMENT_VERSION=local
+ENV DEPLOYMENT_VERSION=$DEPLOYMENT_VERSION
 
 COPY requirements.txt requirements-lock.txt ./
 RUN python -m pip install --no-cache-dir -r requirements-lock.txt -r requirements.txt && python -m pip check
@@ -20,14 +22,15 @@ COPY webapp/ ./webapp/
 COPY templates/ ./templates/
 COPY static/ ./static/
 
-# This project has no training data. Build a fresh development baseline in Linux.
+# Rebuild the frozen selected model from only the 80 committed training rows.
 # A failed deserialization, dependency import, or prediction fails the image build.
-RUN python -m ml.prepare_model \
+RUN python -m ml.build_model \
+    && python -c "from pathlib import Path; assert not Path('/app/ml/datasets/test.csv').exists(), 'Final test data must not enter training image'" \
     && python -m ml.check_model \
     && python manage.py check \
     && python manage.py collectstatic --noinput
 
-RUN useradd --create-home --uid 10001 appuser
+RUN useradd --create-home --uid 10001 appuser && mkdir /state && chown appuser:appuser /state
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

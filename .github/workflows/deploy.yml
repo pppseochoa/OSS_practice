@@ -32,6 +32,14 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
 
     steps:
+      - name: Initialize UTF-8 observation artifacts
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $directory = Join-Path $env:RUNNER_TEMP "kbo-observation-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          "REPORT_DIR=$directory" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          'Monitoring not started yet; intervals outside collected requests are UNVERIFIED.' | Out-File (Join-Path $directory 'status.txt') -Encoding utf8
+
       - name: Check that successful CI still represents main
         id: revision
         env:
@@ -82,6 +90,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Start independent analysis API monitoring before any service change
+        if: steps.revision.outputs.current == 'true'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $case = Join-Path $env:REPORT_DIR 'fixed-case.json'
+          python -m scripts.monitor_case "$case"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare sealed holdout monitoring case.' }
+          $args = "-u -m scripts.monitor --url http://127.0.0.1:8080/api/v1/predict --directory `"$env:REPORT_DIR`" --case `"$case`""
+          $process = Start-Process -FilePath (Get-Command python).Source -ArgumentList $args -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $env:REPORT_DIR 'monitor.stdout.log') -RedirectStandardError (Join-Path $env:REPORT_DIR 'monitor.stderr.log')
+          $process.Id | Out-File (Join-Path $env:REPORT_DIR 'monitor.pid') -Encoding utf8
+          for ($i=0; $i -lt 30; $i++) {
+            if (Test-Path (Join-Path $env:REPORT_DIR 'ready')) { break }
+            if ($process.HasExited) { throw 'Independent monitor exited before readiness.' }
+            Start-Sleep -Seconds 1
+          }
+          if (-not (Test-Path (Join-Path $env:REPORT_DIR 'ready'))) { throw 'No successful analysis API observation; refusing deployment.' }
+          Write-Host 'Independent monitor confirmed normal response; deployment may proceed.'
+
       - name: Pull and replace local service with health checks and rollback
         if: steps.revision.outputs.current == 'true'
         env:
@@ -91,14 +117,38 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ([string]::IsNullOrWhiteSpace($env:DOCKERHUB_USERNAME)) { throw 'Missing DOCKERHUB_USERNAME secret.' }
           $image = "$($env:DOCKERHUB_USERNAME.ToLowerInvariant())/kbo-salary:sha-$env:DEPLOY_SHA"
-          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/deploy-local.ps1 -ImageRef $image -ContainerName kbo-salary -Port 8080
+          New-Item -ItemType File -Path (Join-Path $env:REPORT_DIR 'deploy.started') -Force | Out-Null
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/deploy-bluegreen.ps1 -ImageRef $image -Port 8080 -DeploymentVersion $env:DEPLOY_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Local deployment failed.' }
 
-      - name: Publish service address
-        if: success() && steps.revision.outputs.current == 'true'
+      - name: Finish monitoring (30 seconds after deploy, even on failure)
+        if: always() && steps.revision.outputs.current == 'true'
         run: |
           $ErrorActionPreference = 'Stop'
-          'Service: http://127.0.0.1:8080 (on the Windows Runner computer)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          'Web, assets and batter/pitcher prediction API have passed HTTP checks.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          New-Item -ItemType File -Path (Join-Path $env:REPORT_DIR 'stop.request') -Force | Out-Null
+          if (Test-Path (Join-Path $env:REPORT_DIR 'monitor.pid')) {
+            $monitorId = [int](Get-Content (Join-Path $env:REPORT_DIR 'monitor.pid'))
+            for ($i=0; $i -lt 140; $i++) {
+              if ((Test-Path (Join-Path $env:REPORT_DIR 'done')) -or -not (Get-Process -Id $monitorId -ErrorAction SilentlyContinue)) { break }
+              Start-Sleep -Milliseconds 500
+            }
+            if (Get-Process -Id $monitorId -ErrorAction SilentlyContinue) { Stop-Process -Id $monitorId; 'Monitor stopped after timeout; remaining interval UNVERIFIED.' | Out-File (Join-Path $env:REPORT_DIR 'timeout.txt') -Encoding utf8 }
+          }
+          if (Test-Path ./scripts/monitor_summary.py) {
+            python ./scripts/monitor_summary.py "$env:REPORT_DIR"
+            Get-Content (Join-Path $env:REPORT_DIR 'summary.md') -Raw -Encoding utf8 | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            python ./scripts/capture_report.py "$env:REPORT_DIR"
+          }
+          if (Test-Path (Join-Path $env:REPORT_DIR 'monitor.stdout.log')) { Get-Content (Join-Path $env:REPORT_DIR 'monitor.stdout.log') -Encoding utf8 }
+          if (Test-Path (Join-Path $env:REPORT_DIR 'monitor.stderr.log')) { Get-Content (Join-Path $env:REPORT_DIR 'monitor.stderr.log') -Encoding utf8 }
+
+      - name: Upload full UTF-8 logs and one-screen report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-observation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.REPORT_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
 
       # docker/login-action logs out in its post step. RUNNER_TEMP is outside Git.

@@ -7,7 +7,7 @@
 </head>
 <body>
   <main class="shell" data-api-url="{{ salary_api_url }}">
-    <header><p class="eyebrow">KBO SALARY LAB · DEVELOPMENT</p><h1>다음 시즌, <em>적정 연봉</em>은?</h1><p class="intro">시즌 성적을 입력하면 모델이 다음 해 제안 연봉을 계산합니다. 현재는 학습 전 초기 모델입니다.</p></header>
+    <header><p class="eyebrow">KBO SALARY LAB</p><h1>다음 시즌, <em>적정 연봉</em>은?</h1><p class="intro">시즌 성적을 입력하면 모델이 다음 해 제안 연봉을 계산합니다. 2017년 성적·2018년 연봉으로 학습한 소규모 실험 모델입니다.</p></header>
     <section class="card">
       <div class="tabs" role="group" aria-label="선수 유형 선택"><button type="button" class="tab active" data-type="batter" aria-pressed="true">타자</button><button type="button" class="tab" data-type="pitcher" aria-pressed="false">투수</button></div>
       <h2 id="selected-type" aria-live="polite">선택한 유형: 타자 · 타격 성적 입력</h2>
@@ -22,6 +22,6 @@
         <button class="submit" type="submit">타자 제안 연봉 계산하기</button>
       </form>
       <output id="result" class="result" aria-live="polite">성적을 입력해 계산해 보세요.</output>
-    </section><p class="notice">안내: 이 개발 버전은 학습 데이터가 없는 초기 모델을 사용하므로 실제 계약 판단에 사용하면 안 됩니다.</p>
+    </section><p class="notice">안내: 과거 80명으로 학습한 실험 모델입니다. FA·계약 조건·최근 물가를 반영하지 않으므로 실제 계약 판단에 사용하면 안 됩니다.</p>
   </main><script src="/static/app.js"></script>
 </body></html>

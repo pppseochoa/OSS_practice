@@ -27,3 +27,8 @@ actions-runner-*
 **/_diag
 **/.runner
 **/.credentials*
+**/test.csv
+reports
+verification
+**/*.png
+**/*.webp

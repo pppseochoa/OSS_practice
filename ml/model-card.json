@@ -1,0 +1,46 @@
+{
+  "model_version": "kbo-2017-v1-f22a5f76284d",
+  "selected": "attempt_1_log_ridge",
+  "attempt_count": 2,
+  "selection_metric": "5-fold CV MAE on 80 training rows only",
+  "cv": {
+    "attempt_1_log_ridge": {
+      "cv_mae_krw": 123951453.39723472,
+      "fold_mae_krw": [
+        85928173.09588486,
+        173559811.81215847,
+        121822885.5743314,
+        138068649.17848742,
+        100377747.32531142
+      ]
+    },
+    "attempt_2_small_extra_trees": {
+      "cv_mae_krw": 147002254.26144248,
+      "fold_mae_krw": [
+        179870506.72967637,
+        165838599.71074116,
+        147797127.196016,
+        146851214.57883245,
+        94653823.09194636
+      ]
+    }
+  },
+  "train_sha256": "f22a5f76284d1f55efc8c8ebbc28ca125452e729f50ea8d48191bf095f1313f2",
+  "test_sha256": "4165216014e8b1da5a377f1fd7e33e2f0f949ebd109e80923ddabb45f87cd2a3",
+  "train_count": 80,
+  "test_count": 20,
+  "final_test": {
+    "baseline": {
+      "mae_krw": 174555941.05,
+      "rmse_krw": 358592486.77449137,
+      "r2": -0.29031242279784086
+    },
+    "selected": {
+      "mae_krw": 130602498.5,
+      "rmse_krw": 284998669.2868131,
+      "r2": 0.18496141178691028
+    }
+  },
+  "mae_improvement_percent": 25.180146997924258,
+  "limitations": "20 holdout rows are a small historical sample; model selection never uses these scores; no additional tuning after holdout evaluation."
+}
