@@ -90,25 +90,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Start independent analysis API monitoring before any service change
-        if: steps.revision.outputs.current == 'true'
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $case = Join-Path $env:REPORT_DIR 'fixed-case.json'
-          python -m scripts.monitor_case "$case"
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare sealed holdout monitoring case.' }
-          $args = "-u -m scripts.monitor --url http://127.0.0.1:8080/api/v1/predict --directory `"$env:REPORT_DIR`" --case `"$case`""
-          $process = Start-Process -FilePath (Get-Command python).Source -ArgumentList $args -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $env:REPORT_DIR 'monitor.stdout.log') -RedirectStandardError (Join-Path $env:REPORT_DIR 'monitor.stderr.log')
-          $process.Id | Out-File (Join-Path $env:REPORT_DIR 'monitor.pid') -Encoding utf8
-          for ($i=0; $i -lt 30; $i++) {
-            if (Test-Path (Join-Path $env:REPORT_DIR 'ready')) { break }
-            if ($process.HasExited) { throw 'Independent monitor exited before readiness.' }
-            Start-Sleep -Seconds 1
-          }
-          if (-not (Test-Path (Join-Path $env:REPORT_DIR 'ready'))) { throw 'No successful analysis API observation; refusing deployment.' }
-          Write-Host 'Independent monitor confirmed normal response; deployment may proceed.'
-
-      - name: Pull and replace local service with health checks and rollback
+      - name: Monitor independently, deploy and observe 30 seconds
         if: steps.revision.outputs.current == 'true'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -117,9 +99,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ([string]::IsNullOrWhiteSpace($env:DOCKERHUB_USERNAME)) { throw 'Missing DOCKERHUB_USERNAME secret.' }
           $image = "$($env:DOCKERHUB_USERNAME.ToLowerInvariant())/kbo-salary:sha-$env:DEPLOY_SHA"
-          New-Item -ItemType File -Path (Join-Path $env:REPORT_DIR 'deploy.started') -Force | Out-Null
-          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/deploy-bluegreen.ps1 -ImageRef $image -Port 8080 -DeploymentVersion $env:DEPLOY_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Local deployment failed.' }
+          # Independent Python process, but retain its owning Windows console until
+          # deployment AND post-deploy observation complete. No cross-step child.
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/observe-deployment.ps1 -ImageRef $image -DeploymentVersion $env:DEPLOY_SHA -Directory "$env:REPORT_DIR"
+          if ($LASTEXITCODE -ne 0) { throw 'Deployment or observation failed.' }
 
       - name: Finish monitoring (30 seconds after deploy, even on failure)
         if: always() && steps.revision.outputs.current == 'true'

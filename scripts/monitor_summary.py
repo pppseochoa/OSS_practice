@@ -31,7 +31,7 @@ result={'address':rows[0]['url'] if rows else 'http://127.0.0.1:8080/api/v1/pred
  'response_max_ms':max((r['response_ms'] for r in rows),default=0),'unverified_gaps_over_1_5s':gaps,
  'versions':versions,'post_deploy_observed_s':post_seconds,
  'representative_responses':([rows[0]]+[r for r in rows if r['phase']=='deploying'][:1]+post[:1]+[rows[-1]]) if rows else [],
- 'interpretation':('Observed requests all succeeded; no claim about instants between requests.' if rows and failure==0 else 'Failures or no observations: uninterrupted service NOT verified.'),
+ 'interpretation':('Observed requests all succeeded with >=30s post-deploy coverage; no claim about instants between requests.' if rows and failure==0 and post_seconds>=30 and (folder/'done').exists() else 'Failures, incomplete coverage or no observations: uninterrupted deployment NOT verified.'),
  'gap_policy':'Completion-log gaps >1.5s are UNVERIFIED intervals (includes waiting for response). All time outside this log window is unverified. Scheduling is response completion + 1s, not fixed start-to-start 1s.'}
 card=Path('ml/model-card.json')
 if card.exists(): result['model_comparison']=json.loads(card.read_text(encoding='utf-8'))

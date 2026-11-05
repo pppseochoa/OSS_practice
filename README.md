@@ -65,6 +65,8 @@ Runner는 `HOME`, 라벨 `[self-hosted, Windows, X64]`입니다. Docker Desktop�
 
 CD는 서비스 변경 전에 **독립 Python 프로세스**로 고정된 holdout 행의 실제 `/api/v1/predict` POST 관측을 시작하고 첫 정상 응답을 확인해야 배포를 진행합니다. 요청이 끝난 뒤1초 쉬고 다음 요청을 보냅니다. UTC 시작/종료, 고해상도 응답시간, HTTP상태, 분석 유효성, 실제 응답 배포SHA·모델 버전을 UTF-8 JSONL에 기록합니다. 배포 성공/실패 모두 완료 후 최소30초를 추가 관측합니다. 이전 응답에 버전 필드가 없으면 `unknown-legacy`로 기록하며 추정해서 채우지 않습니다.
 
+Windows Runner 단계 종료 시 자식 콘솔 프로세스가 함께 종료될 수 있어, 독립 모니터의 상위 실행 단계는 배포와30초 후속 관측이 끝날 때까지 유지합니다. 완료 마커·30초 이상 후속 기록·새 배포 버전·요청 성공을 검증해야 작업이 성공합니다. 컨테이너만 정상이고 모니터가 일찍 종료된 경우는 검증 성공으로 보고하지 않습니다.
+
 Actions 로그와 Step Summary에 전체 결과·대표 응답·버전 전환·성공/실패 수·실제 간격·최대 기록 공백을 출력합니다. 로그 완료 간격1.5초 초과 구간은 **UNVERIFIED**, 관측창 밖과 요청 사이도 연속 가용성이 보장된다고 표현하지 않습니다. `deployment-observation-실행ID-시도번호` Artifact에는 JSONL, stdout/stderr, 고정 요청, JSON/Markdown/HTML 요약과 가능한 경우 `summary.png`가 저장됩니다. 배포가 실패해도 `always()` 단계에서 수집합니다. `summary.html`은1440px 너비 한 화면 캡처용이며, 원본 세부값은 JSON에 남습니다. PNG 캡처는 설치된 Playwright/Edge를 이용하며 없어도 HTML·로그는 보존합니다.
 
 독립 관측 포함 수동 재현:
