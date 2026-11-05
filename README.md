@@ -44,6 +44,8 @@ Invoke-RestMethod http://127.0.0.1:8080/health
 
 위 `ExecutionPolicy Bypass`는 해당 자식 PowerShell 프로세스에만 적용되며 시스템 정책을 바꾸지 않습니다. Group Policy가 프로세스 설정도 금지하면 조직 정책을 바꾸지 말고 관리자에게 스크립트 실행 허용 방법을 확인하세요.
 
+Self-hosted Runner의 `run:` 단계도 임시 `.ps1` 파일로 실행됩니다. 따라서 워크플로의 `defaults.run.shell`에도 `powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"`을 지정했습니다. 내부 배포 스크립트 호출에만 옵션을 지정하면 첫 단계에서 `running scripts is disabled on this system`으로 실패할 수 있습니다. 이 오류는 수정된 워크플로를 main에 반영하고 새 push의 CI·배포로 재검증하세요. 이전 실패 실행 재시도는 이전 워크플로를 사용할 수 있습니다.
+
 - **Docker 연결 실패**: Docker Desktop이 켜져 있는지, Runner 계정에서 `docker info --format '{{.OSType}}'`가 `linux`를 반환하는지 확인하고 재실행합니다. 로그인 설정을 임시 `RUNNER_TEMP` 폴더로 분리하더라도 기존 Docker Desktop endpoint는 유지합니다.
 - **8080 포트 충돌**: `Get-NetTCPConnection -LocalPort 8080 -State Listen`으로 확인합니다. 기존 프로세스를 임의로 종료하지 말고 배포 워크플로의 `-Port 8080`을 빈 포트로 바꾼 뒤 새 커밋을 push합니다.
 - **기존 이름 충돌**: 이 스크립트가 만든 관리 라벨이 없는 `kbo-salary`는 변경하지 않습니다. 다른 이름을 지정하거나 기존 컨테이너 소유자를 확인하세요.
