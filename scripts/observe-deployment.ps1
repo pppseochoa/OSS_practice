@@ -1,5 +1,8 @@
 param([Parameter(Mandatory=$true)][string]$ImageRef,[string]$DeploymentVersion='local',[string]$Directory,[switch]$SkipPull)
 $ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)
+$OutputEncoding=[Console]::OutputEncoding
+$env:PYTHONIOENCODING='utf-8'
 if(-not $Directory){$Directory=Join-Path (Get-Location) ('reports/observe-'+(Get-Date -Format 'yyyyMMdd-HHmmss'))}
 New-Item -ItemType Directory -Path $Directory -Force|Out-Null
 $Directory=(Resolve-Path $Directory).Path

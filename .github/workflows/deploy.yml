@@ -30,6 +30,8 @@ jobs:
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
 
     steps:
       - name: Initialize UTF-8 observation artifacts
@@ -108,6 +110,8 @@ jobs:
         if: always() && steps.revision.outputs.current == 'true'
         run: |
           $ErrorActionPreference = 'Stop'
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          $OutputEncoding = [Console]::OutputEncoding
           New-Item -ItemType File -Path (Join-Path $env:REPORT_DIR 'stop.request') -Force | Out-Null
           if (Test-Path (Join-Path $env:REPORT_DIR 'monitor.pid')) {
             $monitorId = [int](Get-Content (Join-Path $env:REPORT_DIR 'monitor.pid'))
