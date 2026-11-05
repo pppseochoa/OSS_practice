@@ -29,3 +29,14 @@ ml/artifacts/
 .agents/
 .DS_Store
 Thumbs.db
+
+# Self-hosted Runner binaries, credentials, logs and job workspaces
+actions-runner/
+actions-runner-*/
+_work/
+_diag/
+.runner
+.credentials*
+.service
+.path
+actions-runner-*.zip

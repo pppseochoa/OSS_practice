@@ -21,3 +21,9 @@ staticfiles
 .github
 .vscode
 .idea
+actions-runner
+actions-runner-*
+**/_work
+**/_diag
+**/.runner
+**/.credentials*

@@ -1,0 +1,101 @@
+name: Deploy to Windows local Docker
+
+on:
+  workflow_run:
+    workflows: ["Build, verify and publish Docker image"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Do not cancel a running container replacement or rollback.
+concurrency:
+  group: kbo-salary-local-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+
+    steps:
+      - name: Check that successful CI still represents main
+        id: revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          API_URL: ${{ github.api_url }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'kbo-salary-deploy' }
+          $branch = [uri]::EscapeDataString($env:DEFAULT_BRANCH)
+          $head = Invoke-RestMethod -Uri "$env:API_URL/repos/$env:REPOSITORY/commits/$branch" -Headers $headers
+          $current = ($head.sha -eq $env:DEPLOY_SHA)
+          "current=$($current.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if (-not $current) { Write-Host 'Skipping superseded CI revision.' }
+
+      - name: Check out exactly the successfully built revision
+        if: steps.revision.outputs.current == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Verify Windows Runner can use Linux Docker
+        if: steps.revision.outputs.current == 'true'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $os = docker info --format '{{.OSType}}'
+          if ($LASTEXITCODE -ne 0 -or $os.Trim() -ne 'linux') {
+            throw 'Start Docker Desktop in Linux containers mode under the Runner account, then retry this workflow.'
+          }
+          # Preserve Desktop's endpoint when isolating DOCKER_CONFIG below.
+          if ([string]::IsNullOrWhiteSpace($env:DOCKER_HOST)) {
+            $endpoint = docker context inspect --format '{{.Endpoints.docker.Host}}'
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot determine Docker Desktop endpoint.' }
+            "DOCKER_HOST=$($endpoint.Trim())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+          # Isolate registry credentials from the Runner user's normal Docker config.
+          $config = Join-Path $env:RUNNER_TEMP "kbo-docker-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $config -Force | Out-Null
+          "DOCKER_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Log in to Docker Hub
+        if: steps.revision.outputs.current == 'true'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull and replace local service with health checks and rollback
+        if: steps.revision.outputs.current == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:DOCKERHUB_USERNAME)) { throw 'Missing DOCKERHUB_USERNAME secret.' }
+          $image = "$($env:DOCKERHUB_USERNAME.ToLowerInvariant())/kbo-salary:sha-$env:DEPLOY_SHA"
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/deploy-local.ps1 -ImageRef $image -ContainerName kbo-salary -Port 8080
+          if ($LASTEXITCODE -ne 0) { throw 'Local deployment failed.' }
+
+      - name: Publish service address
+        if: success() && steps.revision.outputs.current == 'true'
+        run: |
+          'Service: http://127.0.0.1:8080 (on the Windows Runner computer)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          'Web, assets and batter/pitcher prediction API have passed HTTP checks.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      # docker/login-action logs out in its post step. RUNNER_TEMP is outside Git.

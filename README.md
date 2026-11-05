@@ -1,5 +1,59 @@
 # KBO 다음 시즌 연봉 제안 웹 서비스
 
+## Windows Self-hosted Runner 자동 배포
+
+`.github/workflows/deploy.yml`은 기존 CI(`Build, verify and publish Docker image`)가 **main 브랜치 push로 성공 완료**했을 때 실행됩니다. Pull Request·실패한 CI는 로컬 배포를 실행하지 않습니다. `workflow_run` 워크플로 파일은 GitHub 기본 브랜치(main)에 있어야 합니다. 이미 더 최신 main 커밋이 있으면 오래된 CI 결과의 배포는 건너뜁니다.
+
+배포 대상은 `[self-hosted, Windows, X64]` 라벨이 있는 Runner입니다. 현재 PC의 Runner 이름은 `HOME`입니다. Runner에 기본 라벨이 없다면 GitHub **Settings → Actions → Runners → HOME**에서 라벨을 확인하고 워크플로의 `runs-on`과 맞추세요. 같은 라벨을 가진 다른 PC가 있다면 이 PC에 고유 라벨을 붙이고 `runs-on`에도 추가하세요.
+
+### PC에서 준비할 것
+
+1. Windows 사용자 계정으로 Docker Desktop을 시작하고 **Linux containers** 모드인지 확인합니다.
+2. 동일 계정에서 Runner를 온라인 상태로 둡니다. 현재 환경은 Windows PowerShell 5.1을 사용하며 별도 PowerShell 7·Python 설치는 배포에 필요하지 않습니다.
+3. 기존 Repository Secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`을 그대로 유지합니다. 배포도 `docker/login-action@v4`를 사용합니다.
+4. 이 문서와 `.github/workflows/deploy.yml`, `scripts/deploy-local.ps1`, `.gitignore`, `.dockerignore`를 **저장소 루트 기준 경로로 main에 반영**합니다. 그 push에서 CI와 후속 배포가 차례로 실행됩니다.
+
+Runner가 오프라인이면 PC PowerShell에서 Runner 설치 폴더로 이동해 실행합니다.
+
+```powershell
+cd "<저장소 전체 경로>\actions-runner"
+.\run.cmd
+```
+
+`Listening for Jobs` 메시지가 나오면 실행 창을 유지합니다. Runner·Docker Desktop을 Windows 서비스로 새로 설치하거나 보안 정책을 영구 변경하지 않습니다. 재부팅 후에는 Docker Desktop과 Runner를 다시 실행해야 합니다.
+
+### 배포 동작과 접속
+
+배포는 `latest` 대신 성공한 CI의 정확한 `sha-<head_sha>` 태그를 pull합니다. 이미지 ID를 고정한 뒤 모델 로드를 확인하고 임시 포트에서 후보 컨테이너의 웹·정적 파일·타자/투수 API를 검사합니다. 후보가 통과해야만 기존 `kbo-salary`를 잠시 중지하고 새 컨테이너로 교체합니다. 고정 포트 검사에 실패하면 이전 컨테이너를 복구하고 다시 검사한 뒤 작업을 실패로 보고합니다. 교체 중에는 짧은 접속 중단이 있습니다.
+
+성공 후 이 PC 브라우저에서 **http://127.0.0.1:8080**을 엽니다. API 문서는 `/docs`입니다. 포트는 루프백 주소에만 바인딩하여 외부 방화벽 변경이 필요하지 않습니다. 정상 서비스 컨테이너는 계속 실행되며 `unless-stopped` 재시작 정책을 사용합니다. 후보와 검증용 컨테이너만 제거합니다. 다른 프로그램의 컨테이너나 이미지는 정리하지 않습니다.
+
+GitHub Actions → **Deploy to Windows local Docker**에서 로그와 접속 주소를 확인하세요. 수정 후 재검증이 필요하면 해당 실행의 **Re-run failed jobs**를 사용합니다. main이 바뀌었다면 새로운 main push의 CI 성공 결과로 배포하세요. 기존 CI가 성공한 뒤에 배포 워크플로만 처음 등록한 경우에도 새로운 main push가 필요합니다.
+
+### 직접 실행 및 문제 확인
+
+공개 이미지로 동일 배포 스크립트를 직접 실행할 수도 있습니다. 개인 저장소는 먼저 안전한 Docker 로그인 절차가 필요하며 토큰을 명령행이나 저장소에 넣지 마세요.
+
+```powershell
+cd "<저장소 전체 경로>"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy-local.ps1 -ImageRef f92m8c/kbo-salary:latest -Port 8080
+docker ps --filter name=kbo-salary
+docker logs --tail 60 kbo-salary
+Invoke-RestMethod http://127.0.0.1:8080/health
+```
+
+위 `ExecutionPolicy Bypass`는 해당 자식 PowerShell 프로세스에만 적용되며 시스템 정책을 바꾸지 않습니다. Group Policy가 프로세스 설정도 금지하면 조직 정책을 바꾸지 말고 관리자에게 스크립트 실행 허용 방법을 확인하세요.
+
+- **Docker 연결 실패**: Docker Desktop이 켜져 있는지, Runner 계정에서 `docker info --format '{{.OSType}}'`가 `linux`를 반환하는지 확인하고 재실행합니다. 로그인 설정을 임시 `RUNNER_TEMP` 폴더로 분리하더라도 기존 Docker Desktop endpoint는 유지합니다.
+- **8080 포트 충돌**: `Get-NetTCPConnection -LocalPort 8080 -State Listen`으로 확인합니다. 기존 프로세스를 임의로 종료하지 말고 배포 워크플로의 `-Port 8080`을 빈 포트로 바꾼 뒤 새 커밋을 push합니다.
+- **기존 이름 충돌**: 이 스크립트가 만든 관리 라벨이 없는 `kbo-salary`는 변경하지 않습니다. 다른 이름을 지정하거나 기존 컨테이너 소유자를 확인하세요.
+- **중단된 배포 복구본**: `kbo-salary-previous` 또는 `kbo-salary-candidate`가 이미 있으면 덮어쓰지 않습니다. `docker ps -a`와 해당 컨테이너의 로그를 먼저 확인하고 필요한 복구본을 보존하세요.
+- **이미지 pull 실패**: CI가 실제로 게시한 커밋 태그인지 확인하고 Docker Hub Secrets와 저장소 접근 권한을 확인합니다. 자격증명은 로그에 출력하지 마세요.
+
+Runner 설치 폴더 `actions-runner/`, 작업 폴더 `_work/`, 진단 로그 `_diag/`, `.runner`, `.credentials*`는 `.gitignore`와 Docker 빌드 제외 규칙에 포함했습니다. `.gitignore`는 이미 추적 중인 파일을 자동으로 해제하지 않으므로, IDE의 소스 제어 변경 목록에서 Runner 폴더가 포함되지 않았는지 확인하세요. Runner 인증 파일이 이미 GitHub에 게시되었다면 해당 Runner 자격증명을 폐기·재등록하고 저장소 이력을 별도로 정리해야 합니다.
+
+참고: [GitHub workflow_run 이벤트](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run), [Self-hosted Runner 라벨](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/use-in-a-workflow).
+
 ## Docker / GitHub Actions
 
 이 저장소의 루트는 `upload` 폴더입니다. `Dockerfile`, `.dockerignore`, `requirements-lock.txt`, `.github/workflows/ci.yml`과 함께 변경된 소스를 저장소에 반영하세요.
