@@ -37,6 +37,8 @@ python manage.py runserver 127.0.0.1:8000
 
 100건 전체 재현과 최종 평가를 별도로 재현하려면:
 
+CSV 해시는 원래 평가 스냅샷의 CRLF로 줄바꿈을 정규화하여 계산합니다. Git의 LF 변환 때문에 Windows와 Linux에서 같은 데이터가 다른 해시로 검출되는 것을 방지하며, 선수·분할·레이블·평가값은 바꾸지 않습니다.
+
 ```powershell
 python -m ml.collect_data
 python -m ml.experiment --evaluate

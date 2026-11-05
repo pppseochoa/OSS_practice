@@ -12,6 +12,12 @@ SOURCE_COMMIT = '1492f1df10f1983964712771abb336fb16e0f2eb'
 BASE = f'https://raw.githubusercontent.com/yoonkt200/python-data-analysis/{SOURCE_COMMIT}/data/'
 FEATURES = ['games', 'plate_appearances', 'batting_average', 'home_runs', 'rbi', 'stolen_bases', 'games_pitched', 'innings_pitched', 'wins', 'saves', 'era', 'strikeouts']
 
+def dataset_sha256(path):
+    # CSV values are invariant under Git's CRLF/LF conversion. Canonical CRLF
+    # preserves the originally evaluated snapshot hash on Windows and Linux.
+    canonical=Path(path).read_bytes().replace(b'\r\n',b'\n').replace(b'\n',b'\r\n')
+    return hashlib.sha256(canonical).hexdigest()
+
 def main():
     selected, sources = [], []
     for kind, file in [('batter', 'batter_stats_2017.csv'), ('pitcher', 'picher_stats_2017.csv')]:
@@ -49,7 +55,7 @@ def main():
         path=output/f'{split}.csv'
         with path.open('w',encoding='utf-8',newline='') as f:
             w=csv.DictWriter(f,fieldnames=fields);w.writeheader();w.writerows(rows)
-        hashes[split]=hashlib.sha256(path.read_bytes()).hexdigest()
+        hashes[split]=dataset_sha256(path)
     manifest={'source_commit':SOURCE_COMMIT,'sources':sources,'stats_season':2017,'target_season':2018,'salary_unit':'KRW (source ten-thousand KRW x 10000)',
               'selection':'hash order, 50 batters and 50 pitchers; no label ranking','split_seed':42,'train_count':80,'test_count':20,
               'sha256':hashes,'train_ids':[r['row_id'] for r in train],'test_ids':[r['row_id'] for r in test],

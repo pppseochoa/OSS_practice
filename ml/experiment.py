@@ -13,7 +13,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer
-from ml.collect_data import FEATURES
+from ml.collect_data import FEATURES, dataset_sha256
 from ml.models import MODEL_PATH, UntrainedSalaryModel
 
 ROOT=Path(__file__).resolve().parent.parent
@@ -35,7 +35,7 @@ def fit_selected():
     # Never open test.csv here, including imputation/scaling/model selection.
     train=pd.read_csv(DATA/'train.csv')
     manifest=json.loads((DATA/'manifest.json').read_text(encoding='utf-8'))
-    assert len(train)==80 and hashlib.sha256((DATA/'train.csv').read_bytes()).hexdigest()==manifest['sha256']['train']
+    assert len(train)==80 and dataset_sha256(DATA/'train.csv')==manifest['sha256']['train']
     assert not set(train.row_id)&set(manifest['test_ids'])
     scores={}
     models=candidates()
@@ -53,7 +53,7 @@ def fit_selected():
 def evaluate_once(card):
     # Final holdout is first opened AFTER candidate selection and final fit.
     test=pd.read_csv(DATA/'test.csv')
-    assert len(test)==20 and hashlib.sha256((DATA/'test.csv').read_bytes()).hexdigest()==card['test_sha256']
+    assert len(test)==20 and dataset_sha256(DATA/'test.csv')==card['test_sha256']
     model=joblib.load(MODEL_PATH)
     before=np.array([UntrainedSalaryModel().predict(r.player_type,{k:r[k] for k in FEATURES}) for _,r in test.iterrows()])
     after=model['pipeline'].predict(test[INPUTS])
